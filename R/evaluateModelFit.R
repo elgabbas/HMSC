@@ -103,9 +103,20 @@ evaluateModelFit = function(hM, predY){
                                       c(1,2), median2))
    }
    sel = !hM$distr[,1]==3
+   # if (sum(sel)>0){
+   #   mPredY[,sel] = as.matrix(apply(abind(predY[,sel,,drop=FALSE], along=3),
+   #                                  c(1,2), mean2))
+   # }
+
    if (sum(sel)>0){
-       mPredY[,sel] = as.matrix(apply(abind(predY[,sel,,drop=FALSE], along=3),
-                                      c(1,2), mean2))
+      # The following is 5X faster than the original script.
+      # This was tested for probit model
+      if (all(sel)) {
+         mPredY <- plyr::alply(predY, .margins = 3)
+      } else {
+         mPredY[, sel] <- plyr::alply(predY[, sel, , drop = FALSE], .margins = 3)
+      }
+      mPredY <- Reduce("+", mPredY) / length(mPredY)
    }
 
    RMSE = computeRMSE(hM$Y, mPredY)

@@ -186,6 +186,20 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
    } else{
      ppEta <- matrix(list(),predN,0)
    }
+
+
+   # free some memory
+   rm(predPostEta, postEta)
+   object$postList <- object$Y <- object$YScaled <-
+     object$X <- object$XScaled <- NULL
+   post <- post %>%
+     lapply(function(x) {
+       x$Eta <- NULL
+       x
+     })
+   invisible(gc())
+
+
    if (nParallel == 1) {  # non-Parallel
        pred <- lapply(seq_len(predN), function(pN, ...){
          # print(ppEta[pN,])

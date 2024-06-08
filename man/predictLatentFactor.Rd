@@ -11,7 +11,8 @@ predictLatentFactor(
   postAlpha,
   rL,
   predictMean = FALSE,
-  predictMeanField = FALSE
+  predictMeanField = FALSE,
+  nParallel = 1
 )
 }
 \arguments{
@@ -66,6 +67,6 @@ Length of \code{units} vector and number of rows in
   \code{predictMeanField=TRUE} options decrease the asymptotic
   complexity to linear. The \code{predictMeanField=TRUE} option
   also preserves the uncertainty in marginal distribution of
-  predicted latent factors, but neglects the inter-dependece
+  predicted latent factors, but neglects the inter-dependence
   between them.
 }

@@ -70,10 +70,14 @@
 computePredictedValues = function(hM, partition=NULL, partition.sp=NULL, start=1, thin=1,
                                   Yc=NULL, mcmcStep=1, expected=TRUE, initPar=NULL,
                                   nParallel=1, nChains = length(hM$postList), updater=list(),
-                                  verbose = hM$verbose, alignPost = TRUE){
+                                  verbose = hM$verbose, alignPost = TRUE,
+                                  predictEtaMean = TRUE, 
+                                  predictEtaMeanField = FALSE){
    if(is.null(partition)){
       postList = poolMcmcChains(hM$postList, start=start, thin=thin)
-      pred = predict(hM, post=postList, Yc=Yc, mcmcStep=1, expected=expected)
+      pred = predict(hM, post=postList, Yc=Yc, mcmcStep=1, expected=expected, 
+            predictEtaMean = predictEtaMean, 
+            predictEtaMeanField = predictEtaMeanField, nParallel = nParallel)
       predArray = abind(pred, along=3)
    } else{
       if(length(partition) != hM$ny){
@@ -158,7 +162,9 @@ computePredictedValues = function(hM, partition=NULL, partition.sp=NULL, start=1
             dfPi[,r] = factor(hM$dfPi[val,r])
          }
          if(is.null(partition.sp)){
-            pred1 = predict(hM1, post=postList, Loff=LoffVal, X=XVal, XRRR=XRRRVal, studyDesign=dfPi, Yc=Yc[val,,drop=FALSE], mcmcStep=mcmcStep, expected=expected)
+            pred1 = predict(hM1, post=postList, Loff=LoffVal, X=XVal, XRRR=XRRRVal, studyDesign=dfPi, Yc=Yc[val,,drop=FALSE], mcmcStep=mcmcStep, expected=expected, 
+            predictEtaMean = predictEtaMean, 
+            predictEtaMeanField = predictEtaMeanField, nParallel = nParallel)
             pred1Array = abind(pred1,along=3)
          } else {
             hM2 = duplicate(hM)
@@ -183,7 +189,9 @@ computePredictedValues = function(hM, partition=NULL, partition.sp=NULL, start=1
                val.sp = (partition.sp==i)
                YcFull = hM$Y
                YcFull[val,val.sp] = NA
-               pred2 = predict(hM2, post=postList2, Loff=hM2$Loff, X=hM2$X, XRRR=hM2$XRRR, studyDesign=hM2$studyDesign, Yc=YcFull, mcmcStep=mcmcStep, expected=expected)
+               pred2 = predict(hM2, post=postList2, Loff=hM2$Loff, X=hM2$X, XRRR=hM2$XRRR, studyDesign=hM2$studyDesign, Yc=YcFull, mcmcStep=mcmcStep, expected=expected, 
+               predictEtaMean = predictEtaMean,
+               predictEtaMeanField = predictEtaMeanField, nParallel = nParallel)
                pred2Array = abind(pred2,along=3)
                pred1Array[,val.sp,] = pred2Array[val,val.sp,]
             }

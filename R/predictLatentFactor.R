@@ -289,7 +289,6 @@ predictLatentFactor =
             .x = 1:predN,
             .f = function(pN) {
 
-               # print(pN)
                eta = postEta[[pN]]
                nf = ncol(eta)
                etaPred = matrix(NA, n, nf)
@@ -485,6 +484,7 @@ predictLatentFactor =
                return(etaPred)
             },
             .options = furrr::furrr_options(seed = TRUE))
+         snow::stopCluster(c1)
       }
       return(postEtaPred)
    }

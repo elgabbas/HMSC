@@ -176,8 +176,11 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
    for(r in seq_len(object$nr)){
       postEta = lapply(post, function(c) c$Eta[[r]])
       postAlpha = lapply(post, function(c) c$Alpha[[r]])
-      predPostEta[[r]] = predictLatentFactor(unitsPred=levels(dfPiNew[,r]),units=levels(object$dfPi[,r]),
-                                             postEta=postEta,postAlpha=postAlpha,rL=rL[[r]],predictMean=predictEtaMean,predictMeanField=predictEtaMeanField)
+      predPostEta[[r]] = predictLatentFactor(
+        unitsPred=levels(dfPiNew[,r]),units=levels(object$dfPi[,r]),
+        postEta=postEta,postAlpha=postAlpha,rL=rL[[r]],predictMean=predictEtaMean,predictMeanField=predictEtaMeanField,
+        nParallel = nParallel)
+
       rowNames = rownames(predPostEta[[r]][[1]])
       PiNew[,r] = sapply(dfPiNew[,r], function(s) which(rowNames==s))
    }

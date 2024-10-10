@@ -210,9 +210,6 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
    invisible(gc())
 
 
-
-
-
    if (nParallel == 1) {  # non-Parallel
       pred <- lapply(seq_len(predN), function(pN, ...){
          get1prediction(object, X, XRRR, Yc, Loff, rL, rLPar, post[[pN]],
@@ -222,6 +219,9 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
    } else if (useSocket) { # socket cluster (Windows, mac, Linux)
 
       seed <- sample.int(.Machine$integer.max, predN)
+
+      withr::local_options(
+         future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
 
       c1 <- snow::makeSOCKcluster(nParallel)
       on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)

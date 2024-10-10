@@ -158,6 +158,7 @@ computeVariancePartitioning <- function(
    poolN <- length(postList) # pooled chains
 
    for (i in seq_len(poolN)){
+
       Beta <- postList[[i]]$Beta
       lmu <- gemu(postList[[i]])
 
@@ -177,8 +178,11 @@ computeVariancePartitioning <- function(
       f <- getf(postList[[i]])
       a <- geta(postList[[i]])
 
-      a=a-matrix(rep(rowMeans(a),hM$ns),ncol=hM$ns)
-      f=f-matrix(rep(rowMeans(f),hM$ns),ncol=hM$ns)
+      # a=a-matrix(rep(rowMeans(a),hM$ns),ncol=hM$ns)
+      # f=f-matrix(rep(rowMeans(f),hM$ns),ncol=hM$ns)
+      a = a - rowMeans(a)
+      f = f - rowMeans(f)
+
       res1 = sum((rowSums((a*f))/(hM$ns-1))^2)
       res2 = sum((rowSums((a*a))/(hM$ns-1))*(rowSums((f*f))/(hM$ns-1)))
       R2T.Y = R2T.Y + res1/res2
@@ -188,14 +192,12 @@ computeVariancePartitioning <- function(
             class(hM$X)[1L],
             matrix = {cM = cMA},
             list = {cM = cMA[[j]]})
-         # ftotal = t(Beta[,j])%*%cM%*%Beta[,j]
-         ftotal <- mm(mm(Matrix::t(Beta[,j]), cM), Beta[,j])
+         ftotal = t(Beta[,j])%*%cM%*%Beta[,j]
          fixed1[j] = fixed1[j] + ftotal
 
          for (k in 1:ngroups){
             sel = (group==k)
-            # fpart = t(Beta[sel,j])%*%cM[sel,sel]%*%Beta[sel,j]
-            fpart = mm(mm(Matrix::t(Beta[sel,j]), cM[sel,sel]), Beta[sel,j])
+            fpart = t(Beta[sel,j]) %*% cM[sel,sel] %*% Beta[sel,j]
             fixedsplit1[j,k] = fixedsplit1[j,k] + fpart
          }
       }

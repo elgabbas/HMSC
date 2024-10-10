@@ -43,9 +43,9 @@
 #' @importFrom stats cov cor terms
 #' @export
 
-computeVariancePartitioning =
-    function(hM, group=NULL, groupnames=NULL, start=1, na.ignore=FALSE)
-{
+computeVariancePartitioning <- function(
+      hM, group=NULL, groupnames=NULL, start=1, na.ignore=FALSE) {
+
    ny = hM$ny
    nc = hM$nc
    nt = hM$nt
@@ -57,7 +57,7 @@ computeVariancePartitioning =
       ## default: use terms
       if(nc > 1){
          if (is.null(hM$XFormula))
-             stop("no XFormula: you must give 'group' and 'groupnames'")
+            stop("no XFormula: you must give 'group' and 'groupnames'")
          group = attr(hM$X, "assign")
          if (group[1] == 0) # assign (Intercept) to group
             group[1] <- 1
@@ -68,6 +68,7 @@ computeVariancePartitioning =
       }
 
    }
+
    ngroups = max(group);
    fixed = matrix(0,nrow=ns,ncol=1);
    fixedsplit = matrix(0,nrow=ns,ncol=ngroups);
@@ -85,83 +86,116 @@ computeVariancePartitioning =
       hM$X=xl
    }
 
-   switch(class(hM$X)[1L], matrix = {
-      cMA = cov(hM$X)
-   }, list = {
-
-      if(na.ignore){
-         cMA = list()
-         for(s in 1:ns){cMA[[s]]=cov(hM$X[[s]][which(hM$Y[,s]>-Inf),])}
-      }
-      else{cMA = lapply(hM$X, cov)}
-   })
+   switch(
+      class(hM$X)[1L],
+      matrix = {
+         cMA = cov(hM$X)
+      },
+      list = {
+         if(na.ignore){
+            cMA = list()
+            for(s in 1:ns){cMA[[s]]=cov(hM$X[[s]][which(hM$Y[,s]>-Inf),])}
+         }
+         else{cMA = lapply(hM$X, cov)}
+      })
 
    postList=poolMcmcChains(hM$postList, start=start)
+   hM$postList <- NULL
+   invisible(gc())
+   mm <- function(x, y) {
+      mm <- getMethod("%*%", "Matrix")
+      mm(x, y)
+   }
+
+   # no need to calculate la, lf, lmu, lbeta for all chains
+   # just calculate them for each chain in the loop
 
    geta = function(a){
-     switch(class(hM$X)[1L],
-            matrix = {res = hM$X%*%(t(hM$Tr%*%t(a$Gamma)))},
-            list = {
-              res = matrix(NA,hM$ny,hM$ns)
-              for(j in 1:hM$ns) res[,j] =  hM$X[[j]]%*%(t(hM$Tr[j,]%*%t(a$Gamma)))
-            }
-     )
-     return(res)
+      switch(
+         class(hM$X)[1L],
+         matrix = {
+            # res = hM$X%*%(t(hM$Tr%*%t(a$Gamma)))
+            res = mm(hM$X, (Matrix::t(mm(hM$Tr, Matrix::t(a$Gamma)))))
+         },
+         list = {
+            res = matrix(NA,hM$ny,hM$ns)
+            for(j in 1:hM$ns) res[,j] =  hM$X[[j]]%*%(t(hM$Tr[j,]%*%t(a$Gamma)))
+         }
+      )
+      return(res)
    }
-   la=lapply(postList, geta)
+   # la=lapply(postList, geta)
 
-   getf = function(a){
-     switch(class(hM$X)[1L],
-            matrix = {res = hM$X%*%(a$Beta)},
-            list = {
-             res = matrix(NA,hM$ny,hM$ns)
-             for(j in 1:hM$ns) res[,j] = hM$X[[j]]%*%a$Beta[,j]
-            }
-     )
-     return(res)
+   getf = function(a) {
+      switch(
+         class(hM$X)[1L],
+         matrix = {
+            # res = hM$X%*%(a$Beta)
+            res = mm(hM$X, a$Beta)
+         },
+         list = {
+            res = matrix(NA,hM$ny,hM$ns)
+            for(j in 1:hM$ns) res[,j] = hM$X[[j]]%*%a$Beta[,j]
+         }
+      )
+      return(res)
    }
-   lf=lapply(postList, getf)
+   # lf=lapply(postList, getf)
 
    gemu = function(a){
-      res = t(hM$Tr%*%t(a$Gamma))
+      # res = t(hM$Tr%*%t(a$Gamma))
+      res = Matrix::t(mm(hM$Tr, Matrix::t(a$Gamma)))
       return(res)
    }
-   lmu=lapply(postList, gemu)
+   # lmu=lapply(postList, gemu)
 
-
-      gebeta = function(a){
-      res = a$Beta
-      return(res)
-   }
-   lbeta=lapply(postList, gebeta)
+   # gebeta = function(a){
+   #   res = a$Beta
+   #   return(res)
+   # }
+   # lbeta=lapply(postList, gebeta)
 
    poolN <- length(postList) # pooled chains
+
    for (i in seq_len(poolN)){
+      Beta <- postList[[i]]$Beta
+      lmu <- gemu(postList[[i]])
+
       for (k in 1:nc){
-         R2T.Beta[k] = R2T.Beta[k] + cor(lbeta[[i]][k,],lmu[[i]][k,])^2
+         # R2T.Beta[k] = R2T.Beta[k] + cor(lbeta[[i]][k,],lmu[[i]][k,])^2
+         R2T.Beta[k] = R2T.Beta[k] + cor(Beta[k,], lmu[k,])^2
       }
 
       fixed1 = matrix(0,nrow=ns,ncol=1);
       fixedsplit1 = matrix(0,nrow=ns,ncol=ngroups);
       random1 = matrix(0,nrow=ns,ncol=nr);
-      Beta = postList[[i]]$Beta
+      # Beta = postList[[i]]$Beta
       Lambdas = postList[[i]]$Lambda
 
-      f = lf[[i]]
-      a = la[[i]]
+      # f = lf[[i]]
+      # a = la[[i]]
+      f <- getf(postList[[i]])
+      a <- geta(postList[[i]])
 
       a=a-matrix(rep(rowMeans(a),hM$ns),ncol=hM$ns)
       f=f-matrix(rep(rowMeans(f),hM$ns),ncol=hM$ns)
       res1 = sum((rowSums((a*f))/(hM$ns-1))^2)
       res2 = sum((rowSums((a*a))/(hM$ns-1))*(rowSums((f*f))/(hM$ns-1)))
       R2T.Y = R2T.Y + res1/res2
+
       for (j in 1:ns){
-         switch(class(hM$X)[1L], matrix = {cM = cMA}, list = {cM = cMA[[j]]})
-         ftotal = t(Beta[,j])%*%cM%*%Beta[,j]
+         switch(
+            class(hM$X)[1L],
+            matrix = {cM = cMA},
+            list = {cM = cMA[[j]]})
+         # ftotal = t(Beta[,j])%*%cM%*%Beta[,j]
+         ftotal <- mm(mm(Matrix::t(Beta[,j]), cM), Beta[,j])
          fixed1[j] = fixed1[j] + ftotal
+
          for (k in 1:ngroups){
             sel = (group==k)
-            fpart = t(Beta[sel,j])%*%cM[sel,sel]%*%Beta[sel,j]
+            # fpart = t(Beta[sel,j])%*%cM[sel,sel]%*%Beta[sel,j]
+            fpart = mm(mm(Matrix::t(Beta[sel,j]), cM[sel,sel]), Beta[sel,j])
             fixedsplit1[j,k] = fixedsplit1[j,k] + fpart
          }
       }
@@ -170,9 +204,11 @@ computeVariancePartitioning =
          Lambda = Lambdas[[level]]
          nf = dim(Lambda)[[1]]
          for (factor in 1:nf){
-            random1[,level] = random1[,level] + t(Lambda[factor,])*Lambda[factor,]
+            # random1[,level] = random1[,level] + t(Lambda[factor,])*Lambda[factor,]
+            random1[,level] = random1[,level] + Matrix::t(Lambda[factor,])*Lambda[factor,]
          }
       }
+
       if (nr>0){
          tot = fixed1+rowSums(random1)
          fixed = fixed + fixed1/tot
@@ -182,10 +218,12 @@ computeVariancePartitioning =
       } else{
          fixed = fixed + matrix(1,nrow=ns,ncol=1)
       }
+
       for (k in 1:ngroups){
          fixedsplit[,k] =  fixedsplit[,k] + fixedsplit1[,k]/rowSums(fixedsplit1)
       }
    }
+
    fixed = fixed/poolN
    random = random/poolN
    fixedsplit = fixedsplit/poolN

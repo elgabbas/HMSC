@@ -177,11 +177,22 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
    }
 
    predN = length(post)
+
+   # free some memory
+   object$postList <- object$Y <- object$YScaled <- object$X <-
+      object$XScaled <- NULL
+
    predPostEta = vector("list", object$nr)
    PiNew = matrix(NA,nrow(dfPiNew),object$nr)
    for(r in seq_len(object$nr)){
       postEta = lapply(post, function(c) c$Eta[[r]])
       postAlpha = lapply(post, function(c) c$Alpha[[r]])
+
+      # free some memory
+      post <- lapply(post, function(x) {
+         x$Eta <- x$Psi <- x$V <- x$Delta <- x$Gamma <- x$rho <- NULL
+         x
+      })
 
       predPostEta[[r]] = predictLatentFactor(
          unitsPred=levels(dfPiNew[,r]),units=levels(object$dfPi[,r]),
@@ -198,15 +209,7 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
    }
 
    # free some memory
-
    try(rm(predPostEta, postEta), silent = TRUE)
-
-   object$postList <- object$Y <- object$YScaled <- object$X <-
-      object$XScaled <- NULL
-   post <- lapply(post, function(x) {
-      x$Eta <- x$Psi <- x$V <- x$Delta <- x$Gamma <- x$rho <- NULL
-      x
-   })
    invisible(gc())
 
 

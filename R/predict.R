@@ -237,13 +237,13 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
          list = c(
             "object", "X", "XRRR", "Yc", "Loff", "rL", "rLPar", "post",
             "ppEta", "PiNew", "dfPiNew", "nyNew", "expected",
-            "mcmcStep", "seeds", "get1prediction"))
+            "mcmcStep", "seeds", "get1prediction"),
+         envir = environment())
 
       pred <- snow::parLapply(
          cl = c1,
          x = seq_len(predN),
-         fun = function(pN, ...) {
-            LFix = NULL  # Initialize explicitly if necessary
+         fun = function(pN) {
             get1prediction(
                object = object, X = X, XRRR = XRRR, Yc = Yc, Loff = Loff,
                rL = rL, rLPar = rLPar, sam = post[[pN]],

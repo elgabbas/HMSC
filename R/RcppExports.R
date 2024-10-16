@@ -16,3 +16,8 @@ Solve2vect <- function(A, B) {
     .Call(`_Hmsc_Solve2vect`, A, B)
 }
 
+#' @export
+fast_pnorm <- function(x) {
+    .Call(`_Hmsc_fast_pnorm`, x)
+}
+

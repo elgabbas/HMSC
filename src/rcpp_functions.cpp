@@ -22,3 +22,14 @@ arma::vec Solve2vect(const arma::mat& A, const arma::vec& B) {
     // Ensure the result is a vector
     return x;
 }
+
+//' @export
+// [[Rcpp::export]]
+NumericVector fast_pnorm(NumericVector x) {
+    int n = x.size();
+        NumericVector result(n);
+    for (int i = 0; i < n; ++i) {
+        result[i] = 0.5 * erfc(-x[i] / sqrt(2.0));
+    }
+    return result;
+}

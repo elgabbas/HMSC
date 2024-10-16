@@ -46,11 +46,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fast_pnorm
+NumericVector fast_pnorm(NumericVector x);
+RcppExport SEXP _Hmsc_fast_pnorm(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(fast_pnorm(x));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_Hmsc_Solve1", (DL_FUNC) &_Hmsc_Solve1, 1},
     {"_Hmsc_Solve2", (DL_FUNC) &_Hmsc_Solve2, 2},
     {"_Hmsc_Solve2vect", (DL_FUNC) &_Hmsc_Solve2vect, 2},
+    {"_Hmsc_fast_pnorm", (DL_FUNC) &_Hmsc_fast_pnorm, 1},
     {NULL, NULL, 0}
 };
 

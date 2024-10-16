@@ -188,15 +188,19 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
       postEta = lapply(post, function(c) c$Eta[[r]])
       postAlpha = lapply(post, function(c) c$Alpha[[r]])
 
-      # free some memory
-      post <- lapply(post, function(x) {
-         x$Eta <- x$Psi <- x$V <- x$Delta <- x$Gamma <- x$rho <- NULL
-         x
-      })
+      if (r == object$nr){
+         # free some memory
+         post <- lapply(post, function(x) {
+            x$Eta <- x$Psi <- x$V <- x$Delta <- x$Gamma <- x$rho <- NULL
+            x
+         })
+         invisible(gc())
+      }
 
       predPostEta[[r]] = predictLatentFactor(
          unitsPred=levels(dfPiNew[,r]),units=levels(object$dfPi[,r]),
          postEta=postEta,postAlpha=postAlpha,rL=rL[[r]],predictMean=predictEtaMean,predictMeanField=predictEtaMeanField, nParallel = nParallel)
+
       rowNames = rownames(predPostEta[[r]][[1]])
       PiNew[,r] = sapply(dfPiNew[,r], function(s) which(rowNames==s))
    }
@@ -221,35 +225,34 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
 
    } else if (useSocket) { # socket cluster (Windows, mac, Linux)
 
-      seed <- sample.int(.Machine$integer.max, predN)
+      seeds <- sample.int(.Machine$integer.max, predN)
 
       withr::local_options(
          future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
 
       c1 <- snow::makeSOCKcluster(nParallel)
       on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)
-      future::plan("cluster", workers = c1, gc = TRUE)
-      on.exit(future::plan("sequential", gc = TRUE), add = TRUE)
+      snow::clusterExport(
+         cl = c1,
+         list = c(
+            "object", "X", "XRRR", "Yc", "Loff", "rL", "rLPar", "post",
+            "ppEta", "PiNew", "dfPiNew", "nyNew", "expected",
+            "mcmcStep", "seeds", "get1prediction"))
 
-      pred <- future.apply::future_lapply(
-         X = seq_len(predN),
-         FUN = function(pN, ...) {
+      pred <- snow::parLapply(
+         cl = c1,
+         x = seq_len(predN),
+         fun = function(pN, ...) {
+            LFix = NULL  # Initialize explicitly if necessary
             get1prediction(
                object = object, X = X, XRRR = XRRR, Yc = Yc, Loff = Loff,
                rL = rL, rLPar = rLPar, sam = post[[pN]],
                predPostEta = ppEta[pN,], PiNew = PiNew, dfPiNew = dfPiNew,
                nyNew = nyNew, expected = expected,
-               mcmcStep = mcmcStep, seed = seed[pN])
-         },
-         # future.scheduling = Inf,
-         future.seed = TRUE,
-         future.globals = c(
-            "object", "X", "XRRR", "Yc", "Loff", "rL", "rLPar", "post",
-            "ppEta", "PiNew", "dfPiNew", "nyNew", "expected",
-            "mcmcStep", "seed", "get1prediction"))
+               mcmcStep = mcmcStep, seed = seeds[pN])
+         })
 
       snow::stopCluster(c1)
-      future::plan("sequential", gc = TRUE)
 
    } else { # fork (mac, Linux)
       seed <- sample.int(.Machine$integer.max, predN)
@@ -265,7 +268,6 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
 
 
 
-
 ## internal function to get one prediction
 ##
 ##  Needs following variables or arguments that must be passed:
@@ -275,6 +277,18 @@ predict.Hmsc = function(object, post=poolMcmcChains(object$postList), Loff=NULL,
 get1prediction <- function(
       object, X, XRRR, Yc, Loff, rL, rLPar, sam, predPostEta, PiNew, dfPiNew,
       nyNew, expected, mcmcStep, seed = NULL) {
+
+
+   # Faster pnorm
+   Rcpp::cppFunction(
+      'NumericVector fast_pnorm(NumericVector x) {
+         int n = x.size();
+            NumericVector result(n);
+         for (int i = 0; i < n; ++i) {
+            result[i] = 0.5 * erfc(-x[i] / sqrt(2.0));
+         }
+      return result;
+      }')
 
    if (!is.null(seed))
       set.seed(seed)
@@ -302,6 +316,7 @@ get1prediction <- function(
          }
       }
    )
+
 
    LRan = vector("list",object$nr)
    Eta = vector("list",object$nr)
@@ -360,7 +375,7 @@ get1prediction <- function(
    for(j in 1:object$ns){
       if(object$distr[j,"family"] == 2){ # probit
          if(expected){
-            Z[,j] = pnorm(Z[,j])
+            Z[,j] = fast_pnorm(Z[,j])
          } else{
             Z[,j] = as.numeric(Z[,j]>0)
          }

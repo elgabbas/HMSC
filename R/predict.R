@@ -305,7 +305,6 @@ get1prediction <- function(
       }
    )
 
-
    LRan = vector("list",object$nr)
    Eta = vector("list",object$nr)
    for(r in seq_len(object$nr)){

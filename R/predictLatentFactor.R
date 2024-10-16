@@ -317,6 +317,7 @@ predictLatentFactor = function(
             }
          }
       }
+      invisible(gc())
       return(etaPred)
    }
 
@@ -324,26 +325,48 @@ predictLatentFactor = function(
       lapply(1:predN, calc_eta_pred)
    } else {
 
+      # withr::local_options(
+      #    future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
+      #
+      # c1 <- snow::makeSOCKcluster(nParallel)
+      # on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)
+      # future::plan("cluster", workers = c1, gc = TRUE)
+      # on.exit(future::plan("sequential", gc = TRUE), add = TRUE)
+      #
+      # result <- future.apply::future_lapply(
+      #    X = seq_len(predN), FUN = calc_eta_pred,
+      #    # future.scheduling = Inf,
+      #    future.seed = TRUE,
+      #    future.globals = c(
+      #       "calc_eta_pred", "predN", "indOld", "indNew", "n", "np", "nn",
+      #       "unitsPred", "units", "postEta", "postAlpha", "rL",
+      #       "predictMean" , "predictMeanField"),
+      #    future.packages = c("Rcpp", "RcppArmadillo"))
+
       withr::local_options(
          future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
 
       c1 <- snow::makeSOCKcluster(nParallel)
       on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)
-      future::plan("cluster", workers = c1, gc = TRUE)
-      on.exit(future::plan("sequential", gc = TRUE), add = TRUE)
-
-      result <- future.apply::future_lapply(
-         X = seq_len(predN), FUN = calc_eta_pred,
-         # future.scheduling = Inf,
-         future.seed = TRUE,
-         future.globals = c(
+      snow::clusterExport(
+         cl = c1,
+         list = c(
             "calc_eta_pred", "predN", "indOld", "indNew", "n", "np", "nn",
             "unitsPred", "units", "postEta", "postAlpha", "rL",
             "predictMean" , "predictMeanField"),
-         future.packages = c("Rcpp", "RcppArmadillo"))
+         envir = environment())
 
-      invisible(gc())
+      snow::clusterEvalQ(
+         cl = c1,
+         expr = {
+            library(Rcpp)
+            library(RcppArmadillo)
+         })
 
+      result <- snow::parLapply(
+         cl = c1, x = seq_len(predN), fun = calc_eta_pred)
+
+      snow::stopCluster(c1)
       result
    }
 

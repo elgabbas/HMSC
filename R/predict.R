@@ -278,18 +278,6 @@ get1prediction <- function(
       object, X, XRRR, Yc, Loff, rL, rLPar, sam, predPostEta, PiNew, dfPiNew,
       nyNew, expected, mcmcStep, seed = NULL) {
 
-
-   # Faster pnorm
-   Rcpp::cppFunction(
-      'NumericVector fast_pnorm(NumericVector x) {
-         int n = x.size();
-            NumericVector result(n);
-         for (int i = 0; i < n; ++i) {
-            result[i] = 0.5 * erfc(-x[i] / sqrt(2.0));
-         }
-      return result;
-      }')
-
    if (!is.null(seed))
       set.seed(seed)
    if(object$ncRRR>0){

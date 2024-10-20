@@ -102,10 +102,9 @@ computeVariancePartitioning <- function(
    postList=poolMcmcChains(hM$postList, start=start)
    hM$postList <- NULL
    invisible(gc())
-   mm <- function(x, y) {
-      mm <- getMethod("%*%", "Matrix")
-      mm(x, y)
-   }
+
+   mm <- getMethod("%*%", "Matrix")
+
 
    # no need to calculate la, lf, lmu, lbeta for all chains
    # just calculate them for each chain in the loop

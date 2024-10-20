@@ -54,7 +54,14 @@
 
 predictLatentFactor = function(
       unitsPred, units, postEta, postAlpha, rL, predictMean=FALSE,
-      predictMeanField=FALSE, nParallel = 1)    {
+      predictMeanField=FALSE, nParallel = 1, TempDir = "TEMP2Pred")    {
+
+   fs::dir_create(TempDir)
+
+   if (inherits(postEta, "character")) {
+      postEta <- qs::qread(postEta, nthreads = 5)
+   }
+
    if(predictMean && predictMeanField)
       stop("predictMean and predictMeanField arguments cannot be simultaneously TRUE")
 
@@ -65,18 +72,36 @@ predictLatentFactor = function(
    np = length(units)
    nn = sum(indNew)
 
-   calc_eta_pred <- function(pN) {
+   # # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-      mm <- function(x, y) {
-         mm <- getMethod("%*%", "Matrix")
-         mm(x, y)
+   # Save postEta as small chunks
+   chunk_size <- 25
+   ChunkIDs <- ceiling(seq_along(postEta) / chunk_size)
+   Chunks <- purrr::map_chr(
+      .x = seq_len(max(ChunkIDs)),
+      .f = ~ {
+         IDs <- which(ChunkIDs == .x)
+         Ch <- postEta[IDs]
+         ChunkFile <- file.path(TempDir, paste0("postEta_ch", .x, ".qs"))
+         qs::qsave(Ch, file = ChunkFile, preset = "fast")
+         return(ChunkFile)
       }
+   )
+   rm(postEta, ChunkIDs)
+   invisible(gc())
+
+   # # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+   calc_eta_pred <- function(pN, postEta) {
+
+      mm <- getMethod("%*%", "Matrix")
 
       eta = postEta[[pN]]
       nf = ncol(eta)
       etaPred = matrix(NA, n, nf)
       rownames(etaPred) = unitsPred
-      etaPred[indOld,] = eta[match(unitsPred[indOld],units),]
+      # etaPred[indOld,] = eta[match(unitsPred[indOld],units),]
+      etaPred[indOld,] = eta[fastmatch::fmatch(unitsPred[indOld], units), ]
 
       if(nn > 0){
          if(rL$sDim == 0){
@@ -98,11 +123,15 @@ predictLatentFactor = function(
                      D12 <- spDists(s1, s2)
                   } else {
                      dim = NCOL(s1)
-                     D11 = as.matrix(dist(s1))
-                     D12 = sqrt(
-                        Reduce("+",
-                               Map(function(i)
-                                  outer(s1[,i], s2[,i], "-")^2, seq_len(dim))))
+                     # D11 = as.matrix(dist(s1))
+                     D11 = Rfast::Dist(s1)
+                     invisible(gc())
+                     # D12 = sqrt(
+                     #    Reduce(
+                     #       "+",
+                     #       Map(function(i) outer(s1[,i], s2[,i], "-")^2, seq_len(dim))))
+                     D12 <- Rfast::dista(s1, s2)
+                     invisible(gc())
                   }
                } else {
                   D11 = rL$distMat[units, units, drop=FALSE]
@@ -256,10 +285,9 @@ predictLatentFactor = function(
                         dim = NCOL(s)
                         dss = as.matrix(dist(sKnot))
                         das = sqrt(
-                           Reduce("+",
-                                  Map(function(i)
-                                     outer(s[,i], sKnot[,i], "-")^2,
-                                     seq_len(dim))))
+                           Reduce(
+                              "+",
+                              Map(function(i) outer(s[,i], sKnot[,i], "-")^2, seq_len(dim))))
                      }
                      dns = das[np+(1:nn),]
                      dnsOld = das[1:np,]
@@ -317,57 +345,49 @@ predictLatentFactor = function(
             }
          }
       }
-      invisible(gc())
       return(etaPred)
    }
+
+   # # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
    postEtaPred <- if (nParallel == 1) {
       lapply(1:predN, calc_eta_pred)
    } else {
-
       # withr::local_options(
-      #    future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
-      #
-      # c1 <- snow::makeSOCKcluster(nParallel)
-      # on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)
-      # future::plan("cluster", workers = c1, gc = TRUE)
-      # on.exit(future::plan("sequential", gc = TRUE), add = TRUE)
-      #
-      # result <- future.apply::future_lapply(
-      #    X = seq_len(predN), FUN = calc_eta_pred,
-      #    # future.scheduling = Inf,
-      #    future.seed = TRUE,
-      #    future.globals = c(
-      #       "calc_eta_pred", "predN", "indOld", "indNew", "n", "np", "nn",
-      #       "unitsPred", "units", "postEta", "postAlpha", "rL",
-      #       "predictMean" , "predictMeanField"),
-      #    future.packages = c("Rcpp", "RcppArmadillo"))
-
-      withr::local_options(
-         future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
+      # future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
 
       c1 <- snow::makeSOCKcluster(nParallel)
       on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)
       snow::clusterExport(
          cl = c1,
          list = c(
-            "calc_eta_pred", "predN", "indOld", "indNew", "n", "np", "nn",
-            "unitsPred", "units", "postEta", "postAlpha", "rL",
-            "predictMean" , "predictMeanField"),
+            "calc_eta_pred", "indOld", "indNew", "n", "np", "nn",
+            "unitsPred", "units", "postAlpha", "rL",
+            "predictMean", "predictMeanField", "chunk_size", "Chunks"),
          envir = environment())
 
-      snow::clusterEvalQ(
+      invisible(snow::clusterEvalQ(
          cl = c1,
          expr = {
-            library(Rcpp)
-            library(RcppArmadillo)
-         })
+            library(Rcpp); library(RcppArmadillo); library(Matrix)
+            library(purrr); library(qs); library(fs)
+         }))
 
       result <- snow::parLapply(
-         cl = c1, x = seq_len(predN), fun = calc_eta_pred)
+         cl = c1,
+         x = seq_len(length(Chunks)),
+         fun = function(Chunk){
+            ChunkFile <- Chunks[Chunk]
+            Out <- purrr::map(
+               .x = seq_len(chunk_size), .f = calc_eta_pred,
+               postEta = qs::qread(ChunkFile))
+            invisible(fs::file_delete(ChunkFile))
+            return(Out)
+         })
+      result <- do.call(c, result)
 
       snow::stopCluster(c1)
-      result
+      return(result)
    }
 
    return(postEtaPred)

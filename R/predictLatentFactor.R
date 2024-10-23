@@ -54,7 +54,8 @@
 
 predictLatentFactor = function(
       unitsPred, units, postEta, postAlpha, rL, predictMean=FALSE,
-      predictMeanField=FALSE, nParallel = 1, TempDir = "TEMP2Pred")    {
+      predictMeanField=FALSE, nParallel = 1, TempDir = "TEMP2Pred",
+      ModelName = NULL)    {
 
    fs::dir_create(TempDir)
 
@@ -82,13 +83,36 @@ predictLatentFactor = function(
       .f = ~ {
          IDs <- which(ChunkIDs == .x)
          Ch <- postEta[IDs]
-         ChunkFile <- file.path(TempDir, paste0("postEta_ch", .x, ".qs"))
+         ChunkFile <- file.path(TempDir, paste0(ModelName, "_postEta_ch", .x, ".qs"))
          qs::qsave(Ch, file = ChunkFile, preset = "fast")
          return(ChunkFile)
       }
    )
    rm(postEta, ChunkIDs)
    invisible(gc())
+
+   # # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+   # Calculate D11 and D12 only once
+
+   if (predictMean) {
+      if(!is.null(rL$s)){
+         s1 = rL$s[units,, drop=FALSE]
+         s2 = rL$s[unitsPred[indNew],,drop=FALSE]
+         if (is(s1, "Spatial")) {
+            D11 <- spDists(s1)
+            D12 <- spDists(s1, s2)
+         } else {
+            D11 = Rfast::Dist(s1)
+            D12 <- Rfast::dista(s1, s2)
+         }
+      } else {
+         D11 = rL$distMat[units, units, drop=FALSE]
+         D12 = rL$distMat[units, unitsPred[indNew], drop=FALSE]
+      }
+   } else {
+      D11 <- D11 <- NULL
+   }
 
    # # ||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
@@ -115,28 +139,26 @@ predictLatentFactor = function(
             alphapw = rL$alphapw
 
             if(predictMean || predictMeanField){
-               if(!is.null(rL$s)){
-                  s1 = rL$s[units,, drop=FALSE]
-                  s2 = rL$s[unitsPred[indNew],,drop=FALSE]
-                  if (is(s1, "Spatial")) {
-                     D11 <- spDists(s1)
-                     D12 <- spDists(s1, s2)
-                  } else {
-                     dim = NCOL(s1)
-                     # D11 = as.matrix(dist(s1))
-                     D11 = Rfast::Dist(s1)
-                     invisible(gc())
-                     # D12 = sqrt(
-                     #    Reduce(
-                     #       "+",
-                     #       Map(function(i) outer(s1[,i], s2[,i], "-")^2, seq_len(dim))))
-                     D12 <- Rfast::dista(s1, s2)
-                     invisible(gc())
-                  }
-               } else {
-                  D11 = rL$distMat[units, units, drop=FALSE]
-                  D12 = rL$distMat[units, unitsPred[indNew], drop=FALSE]
-               }
+               # if(!is.null(rL$s)){
+               #    s1 = rL$s[units,, drop=FALSE]
+               #    s2 = rL$s[unitsPred[indNew],,drop=FALSE]
+               #    if (is(s1, "Spatial")) {
+               #       D11 <- spDists(s1)
+               #       D12 <- spDists(s1, s2)
+               #    } else {
+               #       dim = NCOL(s1)
+               #       # D11 = as.matrix(dist(s1))
+               #       D11 = Rfast::Dist(s1)
+               #       # D12 = sqrt(
+               #       #    Reduce(
+               #       #       "+",
+               #       #       Map(function(i) outer(s1[,i], s2[,i], "-")^2, seq_len(dim))))
+               #       D12 <- Rfast::dista(s1, s2)
+               #    }
+               # } else {
+               #    D11 = rL$distMat[units, units, drop=FALSE]
+               #    D12 = rL$distMat[units, unitsPred[indNew], drop=FALSE]
+               # }
 
                for(h in 1:nf){
                   if(alphapw[alpha[h],1] > 0){
@@ -144,26 +166,27 @@ predictLatentFactor = function(
                      K12 = exp(-D12/alphapw[alpha[h],1])
 
                      # m = crossprod(K12, solve(K11, eta[,h]))
-                     m = Matrix::crossprod(K12, as.vector(Solve2vect(K11, eta[,h])))
+                     m = Matrix::crossprod(
+                        K12, as.vector(Hmsc::Solve2vect(K11, eta[,h])))
 
-                     if(predictMean)
+                     if(predictMean){
                         etaPred[indNew,h] = m
-
-                     if(predictMeanField){
+                     } else {
                         # LK11 = t(chol(K11))
                         LK11 = Matrix::t(Matrix::chol(K11))
 
                         # iLK11K12 = solve(LK11, K12)
-                        iLK11K12 = Solve2(LK11_2, K12)
+                        iLK11K12 = Hmsc::Solve2(LK11_2, K12)
 
                         v = 1 - colSums(iLK11K12^2)
                         etaPred[indNew,h] = m + rnorm(nn, sd=sqrt(v))
                      }
                   } else{
-                     if(predictMean)
+                     if(predictMean){
                         etaPred[indNew,h] = 0
-                     if(predictMeanField)
+                     } else {
                         etaPred[indNew,h] = rnorm(nn)
+                     }
                   }
                }
 
@@ -278,16 +301,18 @@ predictLatentFactor = function(
                      sKnot = rL$sKnot
                      unitsAll = c(units,unitsPred[indNew])
                      s = rL$s[unitsAll,,drop=FALSE]
+
                      if (is(s, "Spatial")) {
                         das <- spDists(s, sKnot)
                         dss <- spDists(sKnot)
                      } else {
                         dim = NCOL(s)
                         dss = as.matrix(dist(sKnot))
-                        das = sqrt(
-                           Reduce(
-                              "+",
-                              Map(function(i) outer(s[,i], sKnot[,i], "-")^2, seq_len(dim))))
+                        # das = sqrt(
+                        #    Reduce(
+                        #       "+",
+                        #       Map(function(i) outer(s[,i], sKnot[,i], "-")^2, seq_len(dim))))
+                        das <- Rfast::dista(s, sKnot)
                      }
                      dns = das[np+(1:nn),]
                      dnsOld = das[1:np,]
@@ -300,7 +325,7 @@ predictLatentFactor = function(
                            Wss = exp(-dss/alphapw[ag,1])
 
                            # iWss = solve(Wss)
-                           iWss <- Solve1(Wss) #####
+                           iWss <- Hmsc::Solve1(Wss) #####
 
                            # WnsiWss = Wns %*% iWss
                            WnsiWss = mm(Wns,  iWss) #####
@@ -311,9 +336,14 @@ predictLatentFactor = function(
                               dDn[dDn < 0] <- 0
 
                            # D = W12 %*% iWss %*% t(W12)
-                           D = Matrix::tcrossprod(mm(W12, iWss), W12)
+                           # dD = 1-diag(D)
 
-                           dD = 1-diag(D)
+                           # D = Matrix::tcrossprod(mm(W12, iWss), W12)
+                           # dD = 1-diag(D)
+
+                           dD = 1 - (rowSums(mm(W12, iWss) * W12))
+
+
                            idD = 1/dD
                            tmp0 = matrix(rep(idD,NROW(sKnot)),ncol=NROW(sKnot))
                            idDW12 = tmp0*W12
@@ -322,7 +352,7 @@ predictLatentFactor = function(
                            FMat = Wss + mm(Matrix::t(W12), idDW12)
 
                            # iF = solve(FMat)
-                           iF <- Solve1(FMat)
+                           iF <- Hmsc::Solve1(FMat)
 
                            # LiF = chol(iF)
                            LiF = Matrix::chol(iF)
@@ -353,24 +383,22 @@ predictLatentFactor = function(
    postEtaPred <- if (nParallel == 1) {
       lapply(1:predN, calc_eta_pred)
    } else {
-      # withr::local_options(
-      # future.globals.maxSize = 8000 * 1024^2, future.gc = TRUE)
-
       c1 <- snow::makeSOCKcluster(nParallel)
       on.exit(try(snow::stopCluster(c1), silent = TRUE), add = TRUE)
       snow::clusterExport(
          cl = c1,
          list = c(
             "calc_eta_pred", "indOld", "indNew", "n", "np", "nn",
-            "unitsPred", "units", "postAlpha", "rL",
+            "unitsPred", "units", "postAlpha", "rL", "D11", "D12",
             "predictMean", "predictMeanField", "chunk_size", "Chunks"),
          envir = environment())
 
       invisible(snow::clusterEvalQ(
          cl = c1,
          expr = {
-            library(Rcpp); library(RcppArmadillo); library(Matrix)
-            library(purrr); library(qs); library(fs)
+            purrr::walk(
+               .x = c("Rcpp", 'RcppArmadillo', "Matrix", "purrr", "qs", "fs"),
+               .f = library, character.only = TRUE)
          }))
 
       result <- snow::parLapply(
@@ -379,7 +407,8 @@ predictLatentFactor = function(
          fun = function(Chunk){
             ChunkFile <- Chunks[Chunk]
             Out <- purrr::map(
-               .x = seq_len(chunk_size), .f = calc_eta_pred,
+               .x = seq_len(chunk_size),
+               .f = calc_eta_pred,
                postEta = qs::qread(ChunkFile))
             invisible(fs::file_delete(ChunkFile))
             return(Out)
@@ -387,6 +416,7 @@ predictLatentFactor = function(
       result <- do.call(c, result)
 
       snow::stopCluster(c1)
+
       return(result)
    }
 

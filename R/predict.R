@@ -200,14 +200,20 @@ predict.Hmsc = function(
    PiNew = matrix(NA,nrow(dfPiNew),object$nr)
 
    for(r in seq_len(object$nr)) {
+
       # Do not use `predictLatentFactor` when predicting values for response
-      # curves
+      # curves when using coordinates = "i" in constructGradient
       NewUnits <- all(levels(dfPiNew[,r]) == "new_unit")
       InfCoords <- tibble::as_tibble(ranLevels[[r]]$s, rownames = "ID") %>%
-         tail() %>%
-         dplyr::pull(ID) %>%
-         magrittr::equals("new_unit") %>%
-         all()
+         dplyr::filter(ID == "new_unit")
+      if (nrow(InfCoords) > 0) {
+         InfCoords <- dplyr::select(InfCoords, -ID) %>%
+            unlist() %>%
+            magrittr::equals(Inf) %>%
+            all()
+      } else {
+         InfCoords <- FALSE
+      }
 
       if (NewUnits && InfCoords) {
          nLF <- length(post[[1]]$Alpha[[1]])
@@ -436,7 +442,7 @@ predict.Hmsc = function(
                Mean = SpDT_Mean, SD = SpDT_SD, Cov = SpDT_Cov) %>%
                stats::setNames(
                   c("x", "y", paste0(IAS_ID, "_mean"),
-                  paste0(IAS_ID, "_sd"), paste0(IAS_ID, "_cov"))) %>%
+                    paste0(IAS_ID, "_sd"), paste0(IAS_ID, "_cov"))) %>%
                sf::st_as_sf(coords = c("x", "y"), crs = 3035, remove = FALSE)
 
             PredSummaryFile <- file.path(
@@ -616,7 +622,7 @@ get1prediction <- function(
             for(k in 1:rL[[r]]$xDim)
                LRan[[r]] = LRan[[r]] +
                   (Eta[[r]][as.character(dfPiNew[,r]),] *
-                     rL[[r]]$x[as.character(dfPiNew[,r]),k]) %*%
+                      rL[[r]]$x[as.character(dfPiNew[,r]),k]) %*%
                   sam$Lambda[[r]][,,k]
          }
       }
